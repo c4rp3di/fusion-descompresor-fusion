@@ -68,8 +68,15 @@ object Reempaquetador {
                         if (nombreFinal == n) {
                             out.addRawArchiveEntry(e, raw)
                         } else {
-                            val copia = ZipArchiveEntry(e)
-                            copia.name = nombreFinal
+                            // setName es protegido: se crea una entrada nueva con el nombre final y los mismos datos
+                            val copia = ZipArchiveEntry(nombreFinal)
+                            copia.method = e.method
+                            copia.size = e.size
+                            copia.compressedSize = e.compressedSize
+                            copia.crc = e.crc
+                            if (e.time > 0L) copia.time = e.time
+                            copia.unixMode = e.unixMode
+                            copia.internalAttributes = e.internalAttributes
                             out.addRawArchiveEntry(copia, raw)
                         }
                     }
