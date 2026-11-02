@@ -395,6 +395,9 @@ class PantallaAjustes(
             "No se pueden editar ZIP divididos en volúmenes.",
         "Instalar paquetes .apks / .xapk / .apkm" to "Abre el paquete y ve a la pestaña APK: verás cuántos APK contiene y «Instalar paquete». La app elige los splits que corresponden a la arquitectura, densidad de pantalla e idioma de tu dispositivo; si falla, prueba «Todos los splits».\n\n" +
             "Android pedirá confirmar la instalación. Los archivos OBB de los .xapk no se instalan: cópialos tú a Android/obb/<paquete>/.",
+        "Cambiar el icono de un APK" to "En la pestaña APK: «Cambiar icono…» → eliges una imagen. La app localiza los archivos reales del icono (leyendo el Manifest y resources.arsc) y los sustituye en todas las densidades; el icono redondo se recorta en círculo.\n\n" +
+            "En iconos adaptativos con imágenes se cambia la capa de primer plano. Si el icono es vectorial (XML), se convierte a PNG clásico y pierde el efecto adaptativo.\n\n" +
+            "Los cambios quedan pendientes: luego «Reempaquetar → alinear → firmar». Si el APK no declara ningún icono no se puede añadir uno (habría que crear recursos nuevos). Con otra firma, Android no lo instala como actualización de la app original.",
         "Límites y seguridad" to "Se rechazan siempre las rutas con «..», absolutas o con letra de unidad. Los límites de tamaño, ratio de compresión y nº de entradas protegen de «bombas» de descompresión y se pueden ajustar en Seguridad y límites.\n\n" +
             "Una entrada que supera un límite se omite y aparece en el informe con el motivo.",
         "Formatos y contraseñas no soportados" to "No se pueden abrir: ZIP, 7z y RAR con contraseña, RAR5, ni 7z con métodos BCJ2 o PPMd. Tampoco se crea RAR ni 7z.\n\n" +
