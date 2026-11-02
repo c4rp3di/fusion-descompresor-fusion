@@ -5,7 +5,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.View
+import android.graphics.Bitmap
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import androidx.appcompat.app.AlertDialog
@@ -20,7 +24,9 @@ import com.carpe.descompresor.apk.InstaladorApks
 import com.carpe.descompresor.data.Entrada
 import com.carpe.descompresor.apk.FirmadorApk
 import com.carpe.descompresor.apk.GestorKeystore
+import com.carpe.descompresor.apk.IconoApk
 import com.carpe.descompresor.apk.InfoFirma
+import com.carpe.descompresor.apk.PlanIcono
 import com.carpe.descompresor.apk.InspectorApk
 import com.carpe.descompresor.apk.LectorFirma
 import com.carpe.descompresor.apk.Reempaquetador
@@ -101,6 +107,7 @@ class PantallaApk(
 
         contenido.addView(Ui.boton(activity, "Ver Manifest (XML)") { verManifest() }, Ui.anchoTotal(activity, 8))
         contenido.addView(Ui.botonSecundario(activity, "Editar Manifest…") { editarManifest(c) })
+        contenido.addView(Ui.botonSecundario(activity, "Cambiar icono…") { cambiarIcono(c) })
         contenido.addView(Ui.botonSecundario(activity, "Permisos y componentes") { verComponentes() })
         contenido.addView(Ui.botonSecundario(activity, "Ver firma") { verFirma(c) })
         contenido.addView(Ui.botonSecundario(activity, "Comprobar alineación (zipalign)") { verAlineacion(c) })
@@ -168,6 +175,83 @@ class PantallaApk(
             return
         }
         dialogoTexto("AndroidManifest.xml", m.xml)
+    }
+
+    // ---------- cambiar icono ----------
+    private fun cambiarIcono(c: Contenedor) {
+        lanz.abrirDocumento { uri ->
+            if (uri == null) return@abrirDocumento
+            activity.lifecycleScope.launch {
+                try {
+                    val (bmp, plan) = withContext(Dispatchers.IO) {
+                        Pair(IconoApk.decodificar(activity, uri), IconoApk.planificar(c.archivo))
+                    }
+                    mostrarPlanIcono(c, bmp, plan)
+                } catch (t: Throwable) {
+                    dialogoTexto("No se pudo preparar el icono", Ui.mensajeError(t))
+                }
+            }
+        }
+    }
+
+    private fun mostrarPlanIcono(c: Contenedor, bmp: Bitmap, plan: PlanIcono) {
+        if (plan.sinIcono) {
+            dialogoTexto(
+                "Cambiar icono",
+                "Este APK no declara ningún icono (no hay android:icon en el Manifest) o no se pudo localizar.\n\n" +
+                    "Añadir un icono desde cero exige crear recursos nuevos en resources.arsc, algo que esta función no hace." +
+                    (if (plan.avisos.isNotEmpty()) "\n\n" + plan.avisos.joinToString("\n") else "")
+            )
+            return
+        }
+        if (plan.acciones() == 0) {
+            dialogoTexto("Cambiar icono", "No se encontró ningún archivo de icono que se pueda modificar.\n\n" + plan.resumen())
+            return
+        }
+        val cont = Ui.vertical(activity, 16)
+        val vista = ImageView(activity)
+        vista.setImageBitmap(bmp)
+        vista.adjustViewBounds = true
+        cont.addView(vista, LinearLayout.LayoutParams(Ui.dp(activity, 96), Ui.dp(activity, 96)))
+        cont.addView(Ui.texto(activity, plan.resumen(), 12f), Ui.anchoTotal(activity, 8))
+        val rRellenar = RadioButton(activity)
+        val rMargen = RadioButton(activity)
+        if (plan.primerPlano.isNotEmpty()) {
+            cont.addView(Ui.texto(activity, "Icono adaptativo", 13f, true), Ui.anchoTotal(activity, 8))
+            val rg = RadioGroup(activity)
+            rRellenar.text = "Rellenar todo (se recortan los bordes)"
+            rRellenar.id = android.view.View.generateViewId()
+            rMargen.text = "Con margen (el fondo original se ve alrededor)"
+            rMargen.id = android.view.View.generateViewId()
+            rg.addView(rRellenar)
+            rg.addView(rMargen)
+            rRellenar.isChecked = true
+            cont.addView(rg)
+        }
+        cont.addView(
+            Ui.texto(activity, "Los cambios quedan pendientes. Después usa «Reempaquetar → alinear → firmar». Si firmas con otra keystore, Android no lo instalará como actualización de la app original.", 11f),
+            Ui.anchoTotal(activity, 8)
+        )
+        val sv = ScrollView(activity)
+        sv.addView(cont)
+        AlertDialog.Builder(activity)
+            .setTitle("Cambiar icono")
+            .setView(sv)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aplicar") { _, _ ->
+                activity.lifecycleScope.launch {
+                    try {
+                        val msg = withContext(Dispatchers.IO) {
+                            IconoApk.aplicar(activity, c.archivo, plan, bmp, !rMargen.isChecked, vm.cambiosApk)
+                        }
+                        vm.notificar()
+                        Ui.toast(activity, msg)
+                    } catch (t: Throwable) {
+                        dialogoTexto("No se pudo aplicar el icono", Ui.mensajeError(t))
+                    }
+                }
+            }
+            .show()
     }
 
     private fun editarManifest(c: Contenedor) {
