@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="extracciones" path="extracciones/" />
+    <cache-path name="compartir" path="compartir/" />
+    <cache-path name="salida_apk" path="salida_apk/" />
+</paths>
