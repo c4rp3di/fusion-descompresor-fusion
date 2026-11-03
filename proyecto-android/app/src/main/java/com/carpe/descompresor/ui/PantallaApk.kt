@@ -196,12 +196,7 @@ class PantallaApk(
 
     private fun mostrarPlanIcono(c: Contenedor, bmp: Bitmap, plan: PlanIcono) {
         if (plan.sinIcono) {
-            dialogoTexto(
-                "Cambiar icono",
-                "Este APK no declara ningún icono (no hay android:icon en el Manifest) o no se pudo localizar.\n\n" +
-                    "Añadir un icono desde cero exige crear recursos nuevos en resources.arsc, algo que esta función no hace." +
-                    (if (plan.avisos.isNotEmpty()) "\n\n" + plan.avisos.joinToString("\n") else "")
-            )
+            mostrarAnadirIcono(c, bmp, plan)
             return
         }
         if (plan.acciones() == 0) {
@@ -248,6 +243,38 @@ class PantallaApk(
                         Ui.toast(activity, msg)
                     } catch (t: Throwable) {
                         dialogoTexto("No se pudo aplicar el icono", Ui.mensajeError(t))
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun mostrarAnadirIcono(c: Contenedor, bmp: Bitmap, plan: PlanIcono) {
+        val cont = Ui.vertical(activity, 16)
+        val vista = ImageView(activity)
+        vista.setImageBitmap(bmp)
+        vista.adjustViewBounds = true
+        cont.addView(vista, LinearLayout.LayoutParams(Ui.dp(activity, 96), Ui.dp(activity, 96)))
+        val sb = StringBuilder()
+        sb.append("Este APK no tiene icono (o no se pudo localizar).\n\n")
+        sb.append("Puedo intentar añadirlo (EXPERIMENTAL): se crea un recurso nuevo en resources.arsc, se añade el PNG y se pone android:icon en el Manifest.\n\n")
+        sb.append("Si el APK resultante no se instala, descarta los cambios pendientes.")
+        if (plan.avisos.isNotEmpty()) sb.append("\n\n").append(plan.avisos.joinToString("\n"))
+        cont.addView(Ui.texto(activity, sb.toString(), 12f), Ui.anchoTotal(activity, 8))
+        val sv = ScrollView(activity)
+        sv.addView(cont)
+        AlertDialog.Builder(activity)
+            .setTitle("Añadir icono (experimental)")
+            .setView(sv)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Añadir") { _, _ ->
+                activity.lifecycleScope.launch {
+                    try {
+                        val msg = withContext(Dispatchers.IO) { IconoApk.anadir(activity, c.archivo, bmp, vm.cambiosApk) }
+                        vm.notificar()
+                        Ui.toast(activity, msg)
+                    } catch (t: Throwable) {
+                        dialogoTexto("No se pudo añadir el icono", Ui.mensajeError(t))
                     }
                 }
             }
