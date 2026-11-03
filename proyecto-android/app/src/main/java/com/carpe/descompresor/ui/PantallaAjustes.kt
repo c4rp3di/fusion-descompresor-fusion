@@ -244,6 +244,7 @@ class PantallaAjustes(
                 val t = Ui.texto(activity, (if (k.id == activa) "● " else "○ ") + k.nombre + " (" + k.alias + ")", 13f)
                 t.layoutParams = Ui.pesoUno()
                 fila.addView(t)
+                if (k.huella.isNotEmpty()) t.text = t.text.toString() + "\nSHA-256: " + k.huella.take(23) + "…"
                 fila.addView(Ui.botonSecundario(activity, "Usar") {
                     GestorKeystore.seleccionar(activity, k.id)
                     construir()
@@ -275,41 +276,9 @@ class PantallaAjustes(
                 try {
                     val nombre = CopiaLocal.nombreDe(activity, uri)
                     val tmp = withContext(Dispatchers.IO) { GestorKeystore.copiarTemporal(activity, uri) }
-                    pedirTexto("Contraseña del keystore", true, "") { ps ->
-                        activity.lifecycleScope.launch {
-                            try {
-                                val aliases = withContext(Dispatchers.IO) { GestorKeystore.abrirAlmacen(tmp, ps.toCharArray()).aliases() }
-                                if (aliases.isEmpty()) throw IOException("El keystore no contiene claves privadas")
-                                if (aliases.size == 1) {
-                                    pedirClave(tmp, nombre, aliases[0], ps)
-                                } else {
-                                    AlertDialog.Builder(activity)
-                                        .setTitle("Elige el alias")
-                                        .setItems(aliases.toTypedArray()) { _, i -> pedirClave(tmp, nombre, aliases[i], ps) }
-                                        .show()
-                                }
-                            } catch (t: Throwable) {
-                                tmp.delete()
-                                Ui.toast(activity, Ui.mensajeError(t))
-                            }
-                        }
-                    }
+                    ImportadorKeystore.iniciar(activity, vm, tmp, nombre) { construir() }
                 } catch (t: Throwable) {
                     Ui.toast(activity, "No se pudo leer el keystore: " + Ui.mensajeError(t))
-                }
-            }
-        }
-    }
-
-    private fun pedirClave(tmp: File, nombre: String, alias: String, passStore: String) {
-        pedirTexto("Contraseña de la clave «$alias»", true, passStore) { pk ->
-            activity.lifecycleScope.launch {
-                try {
-                    withContext(Dispatchers.IO) { GestorKeystore.guardar(activity, tmp, nombre, alias, passStore, pk) }
-                    Ui.toast(activity, "✔ Keystore importada y activada")
-                    construir()
-                } catch (t: Throwable) {
-                    Ui.toast(activity, "No se pudo importar: " + Ui.mensajeError(t))
                 }
             }
         }
