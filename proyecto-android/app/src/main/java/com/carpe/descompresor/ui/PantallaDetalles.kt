@@ -15,6 +15,7 @@ import com.carpe.descompresor.extraer.SiExiste
 import com.carpe.descompresor.extraer.SolicitudExtraccion
 import com.carpe.descompresor.previsualizacion.Temporales
 import com.carpe.descompresor.util.Formato
+import com.carpe.descompresor.apk.GestorKeystore
 import com.carpe.descompresor.util.Iconos
 import com.carpe.descompresor.util.PreferenciasApp
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,13 @@ object PantallaDetalles {
             DialogoExtraccion.mostrar(activity, vm, lanz, setOf(e.ruta))
             if (p.bool("modo_dev")) Ui.toast(activity, "Extrayendo ${e.ruta}")
         })
+
+        if (esKeystore(e)) {
+            raiz.addView(Ui.boton(activity, "Usar como keystore…") {
+                dialogo.dismiss()
+                usarComoKeystore(activity, vm, e)
+            }, Ui.anchoTotal(activity, 4))
+        }
 
         if (e.categoria == Iconos.Categoria.COMPRIMIDO || e.categoria == Iconos.Categoria.APK) {
             raiz.addView(Ui.boton(activity, "Abrir como contenedor") {
@@ -320,5 +328,33 @@ object PantallaDetalles {
             vm.cambiosApk.renombres.remove(e.ruta)
         }
         vm.notificar()
+    }
+
+    // ---------- keystores dentro de un contenedor ----------
+    private fun esKeystore(e: Entrada): Boolean {
+        val ext = Iconos.extension(e.nombre)
+        return ext in setOf("keystore", "jks", "p12", "pfx", "bks") || e.nombre.lowercase().contains("keystore")
+    }
+
+    private fun usarComoKeystore(activity: AppCompatActivity, vm: ContenedorViewModel, e: Entrada) {
+        val cont = vm.contenedor ?: return
+        if (e.tamano > 5L * 1024L * 1024L) {
+            Ui.toast(activity, "Ese archivo es demasiado grande para ser un keystore")
+            return
+        }
+        activity.lifecycleScope.launch {
+            try {
+                val tmp = withContext(Dispatchers.IO) {
+                    val dir = File(activity.cacheDir, "ks_tmp")
+                    dir.mkdirs()
+                    val f = File(dir, "ks_" + System.currentTimeMillis())
+                    cont.abrirEntrada(e).use { i -> f.outputStream().use { o -> i.copyTo(o) } }
+                    f
+                }
+                ImportadorKeystore.iniciar(activity, vm, tmp, e.nombre) { }
+            } catch (t: Throwable) {
+                Ui.toast(activity, "No se pudo leer el keystore: " + Ui.mensajeError(t))
+            }
+        }
     }
 }
