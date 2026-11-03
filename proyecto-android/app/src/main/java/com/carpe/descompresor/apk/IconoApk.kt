@@ -257,4 +257,74 @@ object IconoApk {
         } while (i >= 0)
         return sb.reverse().toString()
     }
+
+    /**
+     * EXPERIMENTAL: añade un icono a un APK que no tiene ninguno. Crea el recurso en resources.arsc
+     * (o un resources.arsc mínimo si no hay), añade el PNG y pone android:icon en el Manifest.
+     */
+    fun anadir(ctx: Context, apk: File, src: Bitmap, cambios: CambiosApk): String {
+        val dir = File(ctx.cacheDir, "cambios_apk")
+        dir.mkdirs()
+        var contador = 0
+
+        fun poner(ruta: String, bytes: ByteArray) {
+            val f = File(dir, "n_" + System.currentTimeMillis() + "_" + (contador++))
+            f.writeBytes(bytes)
+            cambios.reemplazos[ruta]?.delete()
+            cambios.reemplazos[ruta] = f
+            cambios.eliminados.remove(ruta)
+            cambios.renombres.remove(ruta)
+        }
+
+        val existentes = HashSet<String>()
+        var manifest = ByteArray(0)
+        var arsc: ByteArray? = null
+        ZipFile(apk).use { z ->
+            val en = z.entries()
+            while (en.hasMoreElements()) existentes.add(en.nextElement().name)
+            val pm = cambios.reemplazos["AndroidManifest.xml"]
+            manifest = if (pm != null) pm.readBytes() else {
+                val e = z.getEntry("AndroidManifest.xml") ?: throw IOException("El APK no contiene AndroidManifest.xml")
+                z.getInputStream(e).use { it.readBytes() }
+            }
+            val pa = cambios.reemplazos["resources.arsc"]
+            arsc = if (pa != null) pa.readBytes() else {
+                val e = z.getEntry("resources.arsc")
+                if (e == null) null else z.getInputStream(e).use { it.readBytes() }
+            }
+        }
+
+        val decodificado = ParserAxml.parsear(manifest)
+        val raiz = decodificado.raiz ?: throw IOException("Manifest vacío")
+        val paquete = raiz.atributos["package"] ?: throw IOException("El Manifest no declara el atributo package")
+
+        var ruta = "res/mipmap-nodpi/ic_launcher_extra.png"
+        var n = 1
+        while (ruta in existentes || cambios.reemplazos.containsKey(ruta)) {
+            ruta = "res/mipmap-nodpi/ic_launcher_extra$n.png"
+            n++
+        }
+
+        val resultado = ArscEscritor.agregarIcono(arsc, ruta, paquete)
+        val idTexto = "@0x" + Integer.toHexString(resultado.idRecurso)
+
+        var xml = decodificado.xml
+        val prefijo = Regex("xmlns:(\\w+)=\"http://schemas.android.com/apk/res/android\"").find(xml)?.groupValues?.get(1)
+            ?: throw IOException("El Manifest no declara el espacio de nombres android")
+        val etiqueta = Regex("<application\\b[^>]*>").find(xml) ?: throw IOException("El Manifest no tiene <application>")
+        var tag = etiqueta.value
+        val atributo = Regex("\\b" + prefijo + ":icon=\"[^\"]*\"")
+        tag = if (atributo.containsMatchIn(tag)) {
+            atributo.replace(tag, prefijo + ":icon=\"" + idTexto + "\"")
+        } else {
+            tag.replaceFirst("<application", "<application " + prefijo + ":icon=\"" + idTexto + "\"")
+        }
+        xml = xml.substring(0, etiqueta.range.first) + tag + xml.substring(etiqueta.range.last + 1)
+        val manifestNuevo = EscritorAxml.compilar(xml, manifest)
+
+        poner(ruta, png(renderClasico(src, 192, false)))
+        poner("resources.arsc", resultado.arsc)
+        poner("AndroidManifest.xml", manifestNuevo)
+        return "Icono añadido (experimental): 3 cambios pendientes. Ahora pulsa «Reempaquetar → alinear → firmar» e instálalo; si no se instala, descarta los cambios."
+    }
 }
