@@ -82,7 +82,7 @@ object Reempaquetador {
                     }
                 }
                 for ((n, f) in cambios.reemplazos) {
-                    if (n !in originales) escribirNuevo(out, n, f, false)
+                    if (n !in originales) escribirNuevo(out, n, f, n == "resources.arsc")
                 }
             }
         }
