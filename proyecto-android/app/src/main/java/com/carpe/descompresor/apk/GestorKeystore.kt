@@ -21,7 +21,7 @@ import java.security.spec.PKCS8EncodedKeySpec
 
 class ClaveFirma(val alias: String, val clave: PrivateKey, val certificados: List<X509Certificate>)
 
-class InfoKeystore(val id: String, val nombre: String, val alias: String)
+class InfoKeystore(val id: String, val nombre: String, val alias: String, val huella: String = "")
 
 /** Origen de claves: PKCS12/BKS vía KeyStore de Android, o JKS clásico con lector propio (Android no trae JKS). */
 interface AlmacenClaves {
@@ -200,7 +200,9 @@ object GestorKeystore {
     fun listar(ctx: Context): List<InfoKeystore> {
         val sp = seguras(ctx)
         val ids = (sp.getString("ids", "") ?: "").split(',').filter { it.isNotBlank() }
-        return ids.map { InfoKeystore(it, sp.getString("nombre_$it", it) ?: it, sp.getString("alias_$it", "") ?: "") }
+        return ids.map {
+            InfoKeystore(it, sp.getString("nombre_$it", it) ?: it, sp.getString("alias_$it", "") ?: "", sp.getString("fp_$it", "") ?: "")
+        }
     }
 
     fun activa(ctx: Context): String? = seguras(ctx).getString("activa", null)
@@ -212,7 +214,8 @@ object GestorKeystore {
     /** Valida la clave y guarda el keystore (copia privada + contraseñas cifradas). */
     fun guardar(ctx: Context, temporal: File, nombre: String, alias: String, passStore: String, passClave: String): InfoKeystore {
         val almacen = abrirAlmacen(temporal, passStore.toCharArray())
-        almacen.clave(alias, passClave.toCharArray())  // lanza si no es válida
+        val claveValida = almacen.clave(alias, passClave.toCharArray())  // lanza si no es válida
+        val huella = claveValida.certificados.firstOrNull()?.let { LectorFirma.huella(it) } ?: ""
         val id = "ks" + System.currentTimeMillis()
         temporal.copyTo(File(carpeta(ctx), "$id.ks"), overwrite = true)
         temporal.delete()
@@ -225,9 +228,10 @@ object GestorKeystore {
             .putString("alias_$id", alias)
             .putString("ps_$id", passStore)
             .putString("pk_$id", passClave)
+            .putString("fp_$id", huella)
             .putString("activa", id)
             .apply()
-        return InfoKeystore(id, nombre, alias)
+        return InfoKeystore(id, nombre, alias, huella)
     }
 
     fun eliminar(ctx: Context, id: String) {
@@ -236,7 +240,7 @@ object GestorKeystore {
         val ids = (sp.getString("ids", "") ?: "").split(',').filter { it.isNotBlank() && it != id }
         val e = sp.edit()
             .putString("ids", ids.joinToString(","))
-            .remove("nombre_$id").remove("alias_$id").remove("ps_$id").remove("pk_$id")
+            .remove("nombre_$id").remove("alias_$id").remove("ps_$id").remove("pk_$id").remove("fp_$id")
         if (sp.getString("activa", null) == id) e.remove("activa")
         e.apply()
     }
