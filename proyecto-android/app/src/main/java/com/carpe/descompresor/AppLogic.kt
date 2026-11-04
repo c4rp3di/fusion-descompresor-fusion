@@ -77,17 +77,42 @@ object AppLogic {
         nav.selectedItemId = inicial
         mostrarPorId(inicial)
 
-        // Atrás: pestaña distinta de Contenedor -> vuelve a Contenedor; archivo anidado -> contenedor anterior; si no, sale.
+        // Atrás: nunca cierra la app de golpe. Retrocede pantalla a pantalla hasta la inicial.
+        //  1) otra pestaña -> Contenedor   2) búsqueda/filtro activos -> se limpian
+        //  3) archivo anidado -> contenedor anterior   4) contenedor abierto -> se cierra
+        //  5) pantalla inicial -> hay que pulsar dos veces para salir (la app se minimiza, no se cierra)
+        var ultimoAtras = 0L
         activity.onBackPressedDispatcher.addCallback(activity, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (nav.selectedItemId != R.id.nav_contenedor) {
                     nav.selectedItemId = R.id.nav_contenedor
-                } else if (vm.nivel > 0) {
-                    vm.cerrar()
+                    return
+                }
+                if (vm.consulta.isNotBlank() || vm.filtro != null) {
+                    vm.consulta = ""
+                    vm.filtro = null
+                    vm.notificar()
+                    return
+                }
+                if (vm.contenedor != null) {
+                    if (!vm.cambiosApk.vacio()) {
+                        AlertDialog.Builder(activity)
+                            .setTitle("Cambios sin guardar")
+                            .setMessage("Hay ${vm.cambiosApk.total()} cambio(s) pendientes. Si sales, se descartan.")
+                            .setNegativeButton("Quedarme", null)
+                            .setPositiveButton("Descartar y salir") { _, _ -> vm.cerrar() }
+                            .show()
+                    } else {
+                        vm.cerrar()
+                    }
+                    return
+                }
+                val ahora = System.currentTimeMillis()
+                if (ahora - ultimoAtras < 2000L) {
+                    activity.moveTaskToBack(true)
                 } else {
-                    isEnabled = false
-                    activity.onBackPressedDispatcher.onBackPressed()
-                    isEnabled = true
+                    ultimoAtras = ahora
+                    Ui.toast(activity, "Pulsa atrás otra vez para salir")
                 }
             }
         })
