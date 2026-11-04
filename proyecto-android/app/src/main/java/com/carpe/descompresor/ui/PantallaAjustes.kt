@@ -160,6 +160,11 @@ class PantallaAjustes(
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         contenido.addView(spFuente)
+        opciones("Selector de archivos", "selector_archivos", listOf(
+            "Selector del sistema" to "sistema",
+            "Elegir otra app (gestor de archivos)" to "elegir"
+        ))
+        nota("Con «Elegir otra app» verás un menú con tus gestores de archivos. Esos archivos suelen dar permiso temporal: «Recientes» y «Reanudar» pueden no funcionar con ellos. Truco: mantén pulsado «Abrir archivo» para elegir app solo esa vez.")
         nota("Idioma: español (la interfaz está preparada para traducirse).")
 
         seccion("Extracción")
@@ -339,7 +344,7 @@ class PantallaAjustes(
 
     // ---------- ayuda ----------
     private val temasAyuda: List<Pair<String, String>> = listOf(
-        "Abrir archivos" to "Pulsa «Abrir archivo» y elige uno. Si no hay ninguno abierto verás tus «Recientes»: toca uno para reabrirlo.\n\n" +
+        "Abrir archivos" to "Pulsa «Abrir archivo» y elige uno (si mantienes pulsado el botón, puedes escoger otro gestor de archivos solo esa vez; el ajuste «Selector de archivos» lo cambia para siempre). Si no hay ninguno abierto verás tus «Recientes»: toca uno para reabrirlo.\n\n" +
             "Tocar una carpeta la despliega; tocar un archivo muestra sus detalles, vista previa y acciones. El cuadro de la izquierda de cada fila marca para extraer (en carpetas marca todo lo que contienen).",
         "Dónde se extrae (destinos)" to "• Carpeta elegida (SAF): eliges una carpeta y la app la recuerda. No necesita permisos especiales y funciona en todos los Android.\n\n" +
             "• Almacenamiento (acceso total): escribe en una ruta de tu almacenamiento. Pide el permiso «Acceso a todos los archivos» en Ajustes del sistema. En Android 10 no está disponible.\n\n" +
