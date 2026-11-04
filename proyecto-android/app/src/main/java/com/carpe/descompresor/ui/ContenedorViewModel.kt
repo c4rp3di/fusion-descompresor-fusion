@@ -129,6 +129,9 @@ class ContenedorViewModel : ViewModel() {
     val nivel: Int
         get() = pila.size
 
+    /** Contenedores que contienen al actual (el más externo primero). */
+    fun contenedoresPadre(): List<Contenedor> = pila.map { it.c }
+
     fun rutaNavegacion(): String {
         val partes = ArrayList<String>()
         for (g in pila) partes.add(g.c.nombre)
