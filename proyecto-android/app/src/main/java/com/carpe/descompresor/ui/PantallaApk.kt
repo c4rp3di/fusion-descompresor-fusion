@@ -25,6 +25,9 @@ import com.carpe.descompresor.data.Entrada
 import com.carpe.descompresor.apk.FirmadorApk
 import com.carpe.descompresor.apk.GestorKeystore
 import com.carpe.descompresor.apk.IconoApk
+import com.carpe.descompresor.motor.CatalogoMotores
+import com.carpe.descompresor.util.ArchivoInbox
+import com.carpe.descompresor.util.CopiaLocal
 import com.carpe.descompresor.apk.InfoFirma
 import com.carpe.descompresor.apk.PlanIcono
 import com.carpe.descompresor.apk.InspectorApk
@@ -123,6 +126,15 @@ class PantallaApk(
                 12f
             )
         )
+        val textoKeystore = try {
+            val id = GestorKeystore.activa(activity)
+            val k = GestorKeystore.listar(activity).firstOrNull { it.id == id }
+            if (k != null) "Keystore activa: ${k.nombre} (alias ${k.alias})" else "Aún no hay ninguna keystore activa."
+        } catch (t: Throwable) {
+            "No se pudo leer el almacén de keystores."
+        }
+        contenido.addView(Ui.texto(activity, textoKeystore, 12f), Ui.anchoTotal(activity, 8))
+        contenido.addView(Ui.botonSecundario(activity, "Importar keystore del ZIP del proyecto…") { importarKeystoreDeZip() }, Ui.anchoTotal(activity, 4))
         contenido.addView(Ui.boton(activity, "Reempaquetar → alinear → firmar") { reempaquetarYFirmar(c) }, Ui.anchoTotal(activity, 8))
         if (!cambios.vacio()) {
             contenido.addView(Ui.botonSecundario(activity, "Descartar cambios") {
@@ -175,6 +187,89 @@ class PantallaApk(
             return
         }
         dialogoTexto("AndroidManifest.xml", m.xml)
+    }
+
+    // ---------- importar keystore desde el ZIP del proyecto ----------
+    private fun nombreKeystore(entrada: Entrada): String {
+        val apk = vm.contenedor?.nombre?.removeSuffix(".apk") ?: "app"
+        return apk + " (" + entrada.nombre + ")"
+    }
+
+    private fun importarKeystoreDeZip() {
+        // 1) Si este APK se abrió desde dentro de un ZIP, se busca primero en ese ZIP.
+        for (padre in vm.contenedoresPadre().reversed()) {
+            val l = GestorKeystore.candidatos(padre)
+            if (l.isNotEmpty()) {
+                elegirCandidato(l.map { Pair(padre, it) }, null)
+                return
+            }
+        }
+        // 2) Si no, se pide el ZIP del proyecto (el que se descarga de GitHub con "Download ZIP").
+        lanz.abrirDocumento { uri ->
+            if (uri == null) return@abrirDocumento
+            activity.lifecycleScope.launch {
+                var zip: Contenedor? = null
+                try {
+                    val abierto = withContext(Dispatchers.IO) {
+                        CatalogoMotores.abrir(activity, uri, ArchivoInbox.limiteBytes(activity), null, null)
+                    }
+                    zip = abierto
+                    val l = GestorKeystore.candidatos(abierto)
+                    if (l.isEmpty()) {
+                        cerrarTemporal(abierto)
+                        dialogoTexto(
+                            "No hay ningún keystore en ese archivo",
+                            "No se encontró ningún .keystore, .jks, .p12, .pfx o .bks.\n\n" +
+                                "Si es el ZIP de GitHub: comprueba que es de la rama que compila y que en el repo existe proyecto-android/apk-build/debug.keystore. " +
+                                "Si el workflow no pudo subirlo (permisos de escritura del repo), no existe ahí."
+                        )
+                    } else {
+                        elegirCandidato(l.map { Pair(abierto, it) }, abierto)
+                    }
+                } catch (t: Throwable) {
+                    zip?.let { cerrarTemporal(it) }
+                    dialogoTexto("No se pudo abrir el ZIP", Ui.mensajeError(t))
+                }
+            }
+        }
+    }
+
+    private fun cerrarTemporal(c: Contenedor) {
+        try { c.close() } catch (e: Exception) { }
+        CopiaLocal.borrar(c.archivo)
+    }
+
+    private fun elegirCandidato(lista: List<Pair<Contenedor, Entrada>>, aCerrar: Contenedor?) {
+        if (lista.size == 1) {
+            extraerKeystore(lista[0], aCerrar)
+            return
+        }
+        val nombres = Array(lista.size) { lista[it].second.ruta }
+        AlertDialog.Builder(activity)
+            .setTitle("Se encontraron ${lista.size} keystores")
+            .setItems(nombres) { _, i -> extraerKeystore(lista[i], aCerrar) }
+            .setNegativeButton("Cancelar") { _, _ -> if (aCerrar != null) cerrarTemporal(aCerrar) }
+            .setOnCancelListener { if (aCerrar != null) cerrarTemporal(aCerrar) }
+            .show()
+    }
+
+    private fun extraerKeystore(par: Pair<Contenedor, Entrada>, aCerrar: Contenedor?) {
+        activity.lifecycleScope.launch {
+            try {
+                val tmp = withContext(Dispatchers.IO) {
+                    val dir = File(activity.cacheDir, "ks_tmp")
+                    dir.mkdirs()
+                    val f = File(dir, "ks_" + System.currentTimeMillis())
+                    par.first.abrirEntrada(par.second).use { i -> f.outputStream().use { o -> i.copyTo(o) } }
+                    f
+                }
+                if (aCerrar != null) cerrarTemporal(aCerrar)
+                ImportadorKeystore.automatico(activity, vm, tmp, nombreKeystore(par.second)) { vm.notificar() }
+            } catch (t: Throwable) {
+                if (aCerrar != null) cerrarTemporal(aCerrar)
+                Ui.toast(activity, "No se pudo leer el keystore: " + Ui.mensajeError(t))
+            }
+        }
     }
 
     // ---------- cambiar icono ----------
