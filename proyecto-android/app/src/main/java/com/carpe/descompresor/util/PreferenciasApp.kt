@@ -12,6 +12,7 @@ class PreferenciasApp(ctx: Context) {
         val BASE: Map<String, Any> = linkedMapOf(
             "tema" to "sistema",
             "escala_fuente" to 100,
+            "selector_archivos" to "sistema",
             "destino_defecto" to "saf",
             "preservar" to true,
             "si_existe" to "renombrar",
