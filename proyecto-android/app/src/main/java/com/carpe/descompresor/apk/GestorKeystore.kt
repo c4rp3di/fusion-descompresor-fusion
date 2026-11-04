@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.carpe.descompresor.data.Contenedor
+import com.carpe.descompresor.data.Entrada
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.DataInputStream
@@ -181,14 +183,41 @@ object GestorKeystore {
     }
 
     // ---- Persistencia (contraseñas cifradas con EncryptedSharedPreferences) ----
+    @Volatile
+    private var segurasCache: SharedPreferences? = null
+
     private fun seguras(ctx: Context): SharedPreferences {
+        val c = segurasCache
+        if (c != null) return c
         val app = ctx.applicationContext
         val mk = MasterKey.Builder(app).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-        return EncryptedSharedPreferences.create(
+        val nuevo = EncryptedSharedPreferences.create(
             app, "keystores_seguro", mk,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+        segurasCache = nuevo
+        return nuevo
+    }
+
+    private val extensionesKeystore = setOf("keystore", "jks", "p12", "pfx", "bks")
+
+    /** Entradas de un contenedor que parecen keystores; primero el debug.keystore de Fusion. */
+    fun candidatos(c: Contenedor): List<Entrada> {
+        val l = c.entradas.filter { e ->
+            if (e.esDirectorio) return@filter false
+            val n = e.nombre.lowercase()
+            val ext = n.substringAfterLast('.', "")
+            (ext in extensionesKeystore || n.contains("keystore")) && (e.tamano < 0L || e.tamano <= 5L * 1024L * 1024L)
+        }
+        return l.sortedBy { e ->
+            val r = e.ruta.replace('\\', '/').lowercase()
+            when {
+                r.endsWith("apk-build/debug.keystore") -> 0
+                r.endsWith("debug.keystore") -> 1
+                else -> 2
+            }
+        }
     }
 
     private fun carpeta(ctx: Context): File {
