@@ -69,7 +69,11 @@ class PantallaLista(
         raiz.setPadding(p, p, p, 0)
 
         val fila1 = Ui.fila(activity)
-        val bAbrir = Ui.boton(activity, "Abrir archivo") { abrirArchivo() }
+        val bAbrir = Ui.boton(activity, "Abrir archivo") { abrirArchivo(false) }
+        bAbrir.setOnLongClickListener {
+            abrirArchivo(true)
+            true
+        }
         val bLote = Ui.botonSecundario(activity, "Lote…") { dialogoLote() }
         val bCrear = Ui.botonSecundario(activity, "Crear…") { dialogoCrear() }
         bAbrir.layoutParams = Ui.pesoUno()
@@ -241,8 +245,8 @@ class PantallaLista(
         }
     }
 
-    private fun abrirArchivo() {
-        lanz.elegirVarios { uris ->
+    private fun abrirArchivo(forzarElegir: Boolean) {
+        lanz.elegirVarios(forzarElegir) { uris ->
             if (uris.isEmpty()) return@elegirVarios
             campoBusqueda.setText("")
             if (uris.size == 1) vm.abrir(activity, uris[0], false) else vm.abrirVarios(activity, uris)
