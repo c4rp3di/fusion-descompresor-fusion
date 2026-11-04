@@ -25,8 +25,8 @@ android {
         applicationId "com.carpe.descompresor"
         minSdk 24
         targetSdk 34
-        versionCode 12
-        versionName "v12.0"
+        versionCode 13
+        versionName "v13.0"
     }
 
     buildFeatures {
