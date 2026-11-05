@@ -22,6 +22,7 @@ import com.carpe.descompresor.apk.AlineadorZip
 import com.carpe.descompresor.apk.BundleApk
 import com.carpe.descompresor.apk.InstaladorApks
 import com.carpe.descompresor.data.Entrada
+import com.carpe.descompresor.apk.ExportadorDecodificado
 import com.carpe.descompresor.apk.FirmadorApk
 import com.carpe.descompresor.apk.GestorKeystore
 import com.carpe.descompresor.apk.IconoApk
@@ -114,6 +115,7 @@ class PantallaApk(
         contenido.addView(Ui.botonSecundario(activity, "Permisos y componentes") { verComponentes() })
         contenido.addView(Ui.botonSecundario(activity, "Ver firma") { verFirma(c) })
         contenido.addView(Ui.botonSecundario(activity, "Comprobar alineación (zipalign)") { verAlineacion(c) })
+        contenido.addView(Ui.botonSecundario(activity, "Exportar APK decodificado (ZIP)…") { exportarDecodificado(c) })
         contenido.addView(Ui.boton(activity, "Instalar este APK (tal cual está)") { instalarOriginal(c) }, Ui.anchoTotal(activity, 8))
 
         contenido.addView(Ui.texto(activity, "Reempaquetar", 15f, true), Ui.anchoTotal(activity, 16))
@@ -155,6 +157,39 @@ class PantallaApk(
         val sv = ScrollView(activity)
         sv.addView(tv)
         AlertDialog.Builder(activity).setTitle(titulo).setView(sv).setPositiveButton("Cerrar", null).show()
+    }
+
+    private fun exportarDecodificado(c: Contenedor) {
+        val sugerido = c.nombre.removeSuffix(".apk") + "-decodificado.zip"
+        lanz.crearDocumento(sugerido) { uri ->
+            if (uri == null) return@crearDocumento
+            val espera = AlertDialog.Builder(activity)
+                .setTitle("Exportando")
+                .setMessage("Decodificando y empaquetando…")
+                .setView(ProgressBar(activity))
+                .setCancelable(false)
+                .create()
+            espera.show()
+            activity.lifecycleScope.launch {
+                try {
+                    val r = withContext(Dispatchers.IO) {
+                        val salida = activity.contentResolver.openOutputStream(uri, "wt")
+                            ?: throw IOException("No se pudo escribir en el destino")
+                        salida.use { ExportadorDecodificado.exportar(c.archivo, it) }
+                    }
+                    espera.dismiss()
+                    dialogoTexto(
+                        "✔ APK exportado",
+                        "${r.archivos} archivos copiados.\n${r.xmlDecodificados} XML convertidos a texto legible (Manifest y res/).\n\n" +
+                            "Sin decodificar: resources.arsc, el código (.dex), imágenes, assets y librerías." +
+                            (if (r.xmlSinDecodificar.isNotEmpty()) "\n\nAvisos:\n" + r.xmlSinDecodificar.take(15).joinToString("\n") { "• $it" } else "")
+                    )
+                } catch (t: Throwable) {
+                    espera.dismiss()
+                    dialogoTexto("No se pudo exportar", Ui.mensajeError(t))
+                }
+            }
+        }
     }
 
     /** Instala el APK abierto sin tocarlo (los cambios pendientes NO se incluyen). */
