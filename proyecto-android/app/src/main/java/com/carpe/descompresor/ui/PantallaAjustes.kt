@@ -160,11 +160,13 @@ class PantallaAjustes(
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
         contenido.addView(spFuente)
-        opciones("Selector de archivos", "selector_archivos", listOf(
-            "Selector del sistema" to "sistema",
-            "Elegir otra app (gestor de archivos)" to "elegir"
-        ))
-        nota("Con «Elegir otra app» verás una lista con las apps de tu móvil capaces de elegir archivos (solo aparecen las que lo permiten; si tu gestor no sale, ábrelo y usa «Abrir con» → Descompresor). Esos archivos suelen dar permiso temporal: «Recientes» y «Reanudar» pueden no funcionar con ellos. Truco: mantén pulsado «Abrir archivo» para elegir app solo esa vez.")
+        contenido.addView(Ui.texto(activity, "Selector de archivos", 14f), Ui.anchoTotal(activity, 6))
+        val botonSelector = Ui.botonSecundario(activity, "Selector: " + nombreModoSelector()) { }
+        botonSelector.setOnClickListener {
+            dialogoSelector { botonSelector.text = "Selector: " + nombreModoSelector() }
+        }
+        contenido.addView(botonSelector)
+        nota("«Preguntar cada vez» muestra una lista de apps. «Usar la app que elija» recuerda tu elección y abre esa app directamente. Mantén pulsado «Abrir archivo» para elegir o cambiar de app. Solo aparecen las apps que permiten elegir archivos; esos archivos dan un permiso temporal, así que «Recientes» y «Reanudar» pueden no funcionar con ellos.")
         nota("Idioma: español (la interfaz está preparada para traducirse).")
 
         seccion("Extracción")
@@ -399,6 +401,37 @@ class PantallaAjustes(
                     .setPositiveButton("Cerrar", null)
                     .setNegativeButton("Más temas") { _, _ -> mostrarAyuda() }
                     .show()
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }
+
+    // ---------- selector de archivos ----------
+    private fun nombreModoSelector(): String {
+        return when (prefs.cadena("selector_archivos")) {
+            "elegir" -> "preguntar cada vez"
+            "app" -> {
+                val n = prefs.cadena("selector_app_nombre")
+                if (n.isEmpty()) "app elegida (aún sin elegir)" else "app elegida: $n"
+            }
+            else -> "del sistema"
+        }
+    }
+
+    private fun dialogoSelector(alCambiar: () -> Unit) {
+        val modos = listOf(
+            "sistema" to "Selector del sistema",
+            "elegir" to "Preguntar cada vez (lista de apps)",
+            "app" to "Usar la app que elija (se recuerda)"
+        )
+        val actual = prefs.cadena("selector_archivos")
+        AlertDialog.Builder(activity)
+            .setTitle("Selector de archivos")
+            .setSingleChoiceItems(modos.map { it.second }.toTypedArray(), modos.indexOfFirst { it.first == actual }.coerceAtLeast(0)) { d, i ->
+                prefs.poner("selector_archivos", modos[i].first)
+                d.dismiss()
+                alCambiar()
+                Ui.toast(activity, "Guardado: " + modos[i].second)
             }
             .setNegativeButton("Cerrar", null)
             .show()
