@@ -13,6 +13,8 @@ class PreferenciasApp(ctx: Context) {
             "tema" to "sistema",
             "escala_fuente" to 100,
             "selector_archivos" to "sistema",
+            "selector_app" to "",
+            "selector_app_nombre" to "",
             "destino_defecto" to "saf",
             "preservar" to true,
             "si_existe" to "renombrar",
