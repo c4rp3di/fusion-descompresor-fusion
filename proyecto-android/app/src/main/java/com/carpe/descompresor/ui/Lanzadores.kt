@@ -107,7 +107,8 @@ class Lanzadores(private val activity: ComponentActivity) {
     }
 
     private fun lanzarSelector(multiple: Boolean, forzarElegir: Boolean, cb: (List<Uri>) -> Unit) {
-        val elegir = forzarElegir || PreferenciasApp(activity).cadena("selector_archivos") == "elegir"
+        val prefs = PreferenciasApp(activity)
+        val modo = prefs.cadena("selector_archivos")   // sistema | elegir | app
 
         fun preparar(accion: String): Intent {
             val i = Intent(accion)
@@ -117,44 +118,80 @@ class Lanzadores(private val activity: ComponentActivity) {
             return i
         }
 
-        fun lanzar(intent: Intent) {
+        fun lanzar(intent: Intent): Boolean {
             cbSelector = cb
-            try {
+            return try {
                 selector.launch(intent)
+                true
             } catch (e: Exception) {
                 cbSelector = null
-                cb(emptyList())
+                false
             }
         }
 
-        if (!elegir) {
-            lanzar(preparar(Intent.ACTION_OPEN_DOCUMENT))
+        fun lanzarSistema() {
+            if (!lanzar(preparar(Intent.ACTION_OPEN_DOCUMENT))) cb(emptyList())
+        }
+
+        if (!forzarElegir && modo == "sistema") {
+            lanzarSistema()
             return
         }
 
-        // Lista propia de apps capaces de elegir archivos (el chooser de Android puede saltarse en algunos móviles).
+        // Apps capaces de elegir archivos (lista propia: el chooser de Android se salta en algunos móviles).
         val base = preparar(Intent.ACTION_GET_CONTENT)
         val pm = activity.packageManager
-        val opciones = ArrayList<OpcionApp>()
-        opciones.add(OpcionApp("Selector del sistema", "Recomendado: permite «Recientes» y «Reanudar»", null, null))
+        val apps = ArrayList<ResolveInfo>()
         val vistos = HashSet<String>()
         for (ri in appsSelectoras(base)) {
             val ai = ri.activityInfo ?: continue
             if (!ai.exported) continue
             if (!vistos.add(ai.packageName + "/" + ai.name)) continue
-            opciones.add(OpcionApp(ri.loadLabel(pm).toString(), ai.packageName, ri.loadIcon(pm), ri))
+            apps.add(ri)
+        }
+
+        // Modo "usar la app recordada": se abre directamente.
+        if (!forzarElegir && modo == "app") {
+            val guardada = prefs.cadena("selector_app")
+            val ri = apps.firstOrNull { it.activityInfo.packageName + "/" + it.activityInfo.name == guardada }
+            if (ri != null) {
+                val intent = preparar(Intent.ACTION_GET_CONTENT)
+                intent.setClassName(ri.activityInfo.packageName, ri.activityInfo.name)
+                if (lanzar(intent)) return
+                Ui.toast(activity, "No se pudo abrir la app elegida; se usa el selector del sistema.")
+                lanzarSistema()
+                return
+            }
+            // aún no hay app recordada (o se desinstaló): se muestra la lista
+        }
+
+        // Se recuerda la elección si viene de pulsación larga o del modo "usar la app que elija".
+        val recordar = forzarElegir || modo == "app"
+        val opciones = ArrayList<OpcionApp>()
+        opciones.add(OpcionApp("Selector del sistema", "Recomendado: permite «Recientes» y «Reanudar»", null, null))
+        for (ri in apps) {
+            opciones.add(OpcionApp(ri.loadLabel(pm).toString(), ri.activityInfo.packageName, ri.loadIcon(pm), ri))
         }
         AlertDialog.Builder(activity)
             .setTitle("Elegir archivo con…")
             .setAdapter(AdaptadorApps(activity, opciones)) { _, i ->
-                val o = opciones[i]
-                val ri = o.info
+                val ri = opciones[i].info
                 if (ri == null) {
-                    lanzar(preparar(Intent.ACTION_OPEN_DOCUMENT))
+                    if (recordar) prefs.poner("selector_archivos", "sistema")
+                    lanzarSistema()
                 } else {
+                    if (recordar) {
+                        prefs.poner("selector_archivos", "app")
+                        prefs.poner("selector_app", ri.activityInfo.packageName + "/" + ri.activityInfo.name)
+                        prefs.poner("selector_app_nombre", opciones[i].titulo)
+                        Ui.toast(activity, "Selector recordado: ${opciones[i].titulo}. Mantén pulsado «Abrir archivo» para cambiarlo.")
+                    }
                     val intent = preparar(Intent.ACTION_GET_CONTENT)
                     intent.setClassName(ri.activityInfo.packageName, ri.activityInfo.name)
-                    lanzar(intent)
+                    if (!lanzar(intent)) {
+                        Ui.toast(activity, "No se pudo abrir esa app; se usa el selector del sistema.")
+                        lanzarSistema()
+                    }
                 }
             }
             .setNegativeButton("Cancelar") { _, _ -> cb(emptyList()) }
