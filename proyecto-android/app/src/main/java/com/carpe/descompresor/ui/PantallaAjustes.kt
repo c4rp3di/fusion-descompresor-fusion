@@ -164,7 +164,7 @@ class PantallaAjustes(
             "Selector del sistema" to "sistema",
             "Elegir otra app (gestor de archivos)" to "elegir"
         ))
-        nota("Con «Elegir otra app» verás un menú con tus gestores de archivos. Esos archivos suelen dar permiso temporal: «Recientes» y «Reanudar» pueden no funcionar con ellos. Truco: mantén pulsado «Abrir archivo» para elegir app solo esa vez.")
+        nota("Con «Elegir otra app» verás una lista con las apps de tu móvil capaces de elegir archivos (solo aparecen las que lo permiten; si tu gestor no sale, ábrelo y usa «Abrir con» → Descompresor). Esos archivos suelen dar permiso temporal: «Recientes» y «Reanudar» pueden no funcionar con ellos. Truco: mantén pulsado «Abrir archivo» para elegir app solo esa vez.")
         nota("Idioma: español (la interfaz está preparada para traducirse).")
 
         seccion("Extracción")
