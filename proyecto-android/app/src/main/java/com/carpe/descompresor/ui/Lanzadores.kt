@@ -2,6 +2,15 @@ package com.carpe.descompresor.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
+import android.content.pm.ResolveInfo
+import android.graphics.drawable.Drawable
+import android.view.View
+import android.view.ViewGroup
+import android.widget.BaseAdapter
+import android.widget.ImageView
+import android.widget.LinearLayout
+import androidx.appcompat.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -58,20 +67,98 @@ class Lanzadores(private val activity: ComponentActivity) {
         return l
     }
 
+    private class OpcionApp(val titulo: String, val detalle: String, val icono: Drawable?, val info: ResolveInfo?)
+
+    private class AdaptadorApps(private val ctx: Context, private val items: List<OpcionApp>) : BaseAdapter() {
+        override fun getCount(): Int = items.size
+        override fun getItem(position: Int): Any = items[position]
+        override fun getItemId(position: Int): Long = position.toLong()
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val o = items[position]
+            val fila = LinearLayout(ctx)
+            fila.orientation = LinearLayout.HORIZONTAL
+            fila.gravity = android.view.Gravity.CENTER_VERTICAL
+            val p = Ui.dp(ctx, 14)
+            fila.setPadding(p, Ui.dp(ctx, 10), p, Ui.dp(ctx, 10))
+            val icono = ImageView(ctx)
+            icono.setImageDrawable(o.icono)
+            fila.addView(icono, LinearLayout.LayoutParams(Ui.dp(ctx, 40), Ui.dp(ctx, 40)))
+            val textos = LinearLayout(ctx)
+            textos.orientation = LinearLayout.VERTICAL
+            textos.setPadding(Ui.dp(ctx, 12), 0, 0, 0)
+            textos.addView(Ui.texto(ctx, o.titulo, 15f))
+            val sub = Ui.texto(ctx, o.detalle, 11f)
+            sub.alpha = 0.6f
+            textos.addView(sub)
+            fila.addView(textos)
+            return fila
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun appsSelectoras(base: Intent): List<ResolveInfo> {
+        val pm = activity.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= 33) pm.queryIntentActivities(base, PackageManager.ResolveInfoFlags.of(0L))
+            else pm.queryIntentActivities(base, 0)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun lanzarSelector(multiple: Boolean, forzarElegir: Boolean, cb: (List<Uri>) -> Unit) {
         val elegir = forzarElegir || PreferenciasApp(activity).cadena("selector_archivos") == "elegir"
-        val base = Intent(if (elegir) Intent.ACTION_GET_CONTENT else Intent.ACTION_OPEN_DOCUMENT)
-        base.addCategory(Intent.CATEGORY_OPENABLE)
-        base.type = "*/*"
-        if (multiple) base.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-        val intent = if (elegir) Intent.createChooser(base, "Elegir archivo con…") else base
-        cbSelector = cb
-        try {
-            selector.launch(intent)
-        } catch (e: Exception) {
-            cbSelector = null
-            cb(emptyList())
+
+        fun preparar(accion: String): Intent {
+            val i = Intent(accion)
+            i.addCategory(Intent.CATEGORY_OPENABLE)
+            i.type = "*/*"
+            if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            return i
         }
+
+        fun lanzar(intent: Intent) {
+            cbSelector = cb
+            try {
+                selector.launch(intent)
+            } catch (e: Exception) {
+                cbSelector = null
+                cb(emptyList())
+            }
+        }
+
+        if (!elegir) {
+            lanzar(preparar(Intent.ACTION_OPEN_DOCUMENT))
+            return
+        }
+
+        // Lista propia de apps capaces de elegir archivos (el chooser de Android puede saltarse en algunos móviles).
+        val base = preparar(Intent.ACTION_GET_CONTENT)
+        val pm = activity.packageManager
+        val opciones = ArrayList<OpcionApp>()
+        opciones.add(OpcionApp("Selector del sistema", "Recomendado: permite «Recientes» y «Reanudar»", null, null))
+        val vistos = HashSet<String>()
+        for (ri in appsSelectoras(base)) {
+            val ai = ri.activityInfo ?: continue
+            if (!ai.exported) continue
+            if (!vistos.add(ai.packageName + "/" + ai.name)) continue
+            opciones.add(OpcionApp(ri.loadLabel(pm).toString(), ai.packageName, ri.loadIcon(pm), ri))
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Elegir archivo con…")
+            .setAdapter(AdaptadorApps(activity, opciones)) { _, i ->
+                val o = opciones[i]
+                val ri = o.info
+                if (ri == null) {
+                    lanzar(preparar(Intent.ACTION_OPEN_DOCUMENT))
+                } else {
+                    val intent = preparar(Intent.ACTION_GET_CONTENT)
+                    intent.setClassName(ri.activityInfo.packageName, ri.activityInfo.name)
+                    lanzar(intent)
+                }
+            }
+            .setNegativeButton("Cancelar") { _, _ -> cb(emptyList()) }
+            .show()
     }
 
     /** [forzarElegir]: muestra siempre el chooser de apps, aunque el ajuste sea "selector del sistema". */
